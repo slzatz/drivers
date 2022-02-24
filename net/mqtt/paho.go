@@ -90,6 +90,8 @@ type Client interface {
 	// OptionsReader returns a ClientOptionsReader which is a copy of the clientoptions
 	// in use by the client.
 	OptionsReader() ClientOptionsReader
+	//Pingreq added slz
+	Pingreq() Token
 }
 
 // Token defines the interface for the tokens used to indicate when

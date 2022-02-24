@@ -301,6 +301,7 @@ func New(bus drivers.SPI, csPin, ackPin, gpio0Pin, resetPin machine.Pin) *Device
 	}
 }
 
+// this works for nano 33 iot
 func (d *Device) Configure() {
 	net.UseDriver(d)
 	pinUseDevice(d)
@@ -313,8 +314,32 @@ func (d *Device) Configure() {
 	d.GPIO0.High()
 	d.CS.High()
 	d.RESET.Low()
+	//d.RESET.High()
 	time.Sleep(1 * time.Millisecond)
 	d.RESET.High()
+	//d.RESET.Low()
+	time.Sleep(1 * time.Millisecond)
+
+	d.GPIO0.Low()
+	d.GPIO0.Configure(machine.PinConfig{Mode: machine.PinInput})
+
+}
+
+// for MKR1010 active reset is high
+func (d *Device) Configure2(resetActiveHigh bool) {
+	net.UseDriver(d)
+	pinUseDevice(d)
+
+	d.CS.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	d.ACK.Configure(machine.PinConfig{Mode: machine.PinInput})
+	d.RESET.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	d.GPIO0.Configure(machine.PinConfig{Mode: machine.PinOutput})
+
+	d.GPIO0.High()
+	d.CS.High()
+	d.RESET.Set(resetActiveHigh)
+	time.Sleep(1 * time.Millisecond)
+	d.RESET.Set(!resetActiveHigh)
 	time.Sleep(1 * time.Millisecond)
 
 	d.GPIO0.Low()

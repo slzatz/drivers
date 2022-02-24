@@ -127,6 +127,16 @@ func (c *mqttclient) Connect() Token {
 	return &mqtttoken{}
 }
 
+// Added Pingreq (slz)
+func (c *mqttclient) Pingreq() Token {
+	connectPkt := packets.NewControlPacket(packets.Pingreq).(*packets.PingreqPacket)
+	err := connectPkt.Write(c.conn)
+	if err != nil {
+		return &mqtttoken{err: err}
+	}
+	return &mqtttoken{}
+}
+
 // Disconnect will end the connection with the server, but not before waiting
 // the specified number of milliseconds to wait for existing work to be
 // completed.
