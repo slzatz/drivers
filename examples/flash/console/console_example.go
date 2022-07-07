@@ -25,11 +25,12 @@ var (
 	dev *flash.Device
 
 	commands map[string]cmdfunc = map[string]cmdfunc{
-		"":      cmdfunc(noop),
-		"erase": cmdfunc(erase),
-		"lsblk": cmdfunc(lsblk),
-		"write": cmdfunc(write),
-		"xxd":   cmdfunc(xxd),
+		"":          cmdfunc(noop),
+		"erase":     cmdfunc(erase),
+		"lsblk":     cmdfunc(lsblk),
+		"write":     cmdfunc(write),
+		"writefile": cmdfunc(writefile),
+		"xxd":       cmdfunc(xxd),
 	}
 )
 
@@ -130,11 +131,13 @@ func lsblk(argv []string) {
 		"\n-------------------------------------\r\n"+
 			" Device Information:  \r\n"+
 			"-------------------------------------\r\n"+
-			" JEDEC ID: %v\r\n"+
-			" Serial:   %v\r\n"+
+			" JEDEC ID: %6X\r\n"+
+			" Serial:   %08X\r\n"+
 			" Status 1: %02x\r\n"+
 			" Status 2: %02x\r\n"+
 			" \r\n"+
+			" Total size: %d\r\n"+
+			" Quad enable bitmask: %x\r\n"+
 			" Max clock speed (MHz): %d\r\n"+
 			" Has Sector Protection: %t\r\n"+
 			" Supports Fast Reads:   %t\r\n"+
@@ -142,11 +145,15 @@ func lsblk(argv []string) {
 			" Supports QSPI Write:   %t\r\n"+
 			" Write Status Split:    %t\r\n"+
 			" Single Status Byte:    %t\r\n"+
+			" Write Block Size:    %d\r\n"+
+			" Erase Block Size:    %d\r\n"+
 			"-------------------------------------\r\n\r\n",
-		attrs.JedecID,
+		attrs.JedecID.Uint32(),
 		serialNumber1,
 		status1,
 		status2,
+		attrs.TotalSize,
+		attrs.QuadEnableBitMask,
 		attrs.MaxClockSpeedMHz,
 		attrs.HasSectorProtection,
 		attrs.SupportsFastRead,
@@ -154,6 +161,8 @@ func lsblk(argv []string) {
 		attrs.SupportsQSPIWrites,
 		attrs.WriteStatusSplit,
 		attrs.SingleStatusByte,
+		dev.WriteBlockSize(),
+		dev.EraseBlockSize(),
 	)
 }
 
@@ -198,6 +207,54 @@ func write(argv []string) {
 	buf := []byte(argv[2])
 	if _, err = dev.WriteAt(buf, int64(addr)); err != nil {
 		println("Write error: " + err.Error() + "\r\n")
+	}
+}
+
+func writefile(argv []string) {
+	if len(argv) != 3 {
+		println("usage: writefile <hex offset> <number of bytes>")
+	} else {
+		println("ok\r\n")
+	}
+	ln, _ := strconv.Atoi(strings.TrimSpace(argv[2]))
+	//ln, _ := strconv.ParseInt(strings.TrimSpace(argv[2]), 10, 32)
+	var err error
+	var addr uint64 = 0x0
+	if addr, err = strconv.ParseUint(argv[1], 16, 32); err != nil {
+		println("Invalid address: " + err.Error() + "\r\n")
+		return
+	}
+
+	tempBuf := make([]byte, 64) //100 works
+	var n int64
+	var j int
+	for {
+		if console.Buffered() > 0 {
+			k, err := console.Read(tempBuf)
+			if err != nil {
+				continue
+			}
+			// Not sure this check is necessary but was getting a few stray bytes at the beginning
+			if k < 2 {
+				continue
+			}
+			if err := dev.WaitUntilReady(); err != nil {
+				fmt.Printf("\nerror WaitUntilReady: %s\r\n", err)
+				return
+			}
+			if j, err = dev.WriteAt(tempBuf, int64(addr)+n); err != nil {
+				println("Write error: " + err.Error() + "\r\n")
+			}
+			n += int64(k)
+			fmt.Printf("k = %d; j = %d\r\n", k, j)
+			fmt.Printf("n = %d\r\n", n)
+			// note that tempBuf during the last write may contain elements of the next to last write if last transfer was < 64
+			// not really a problem because when we read the 'file' we give starting address and length
+			if n >= int64(ln) { // note that last write may contain elements of next to last write if last write is < 64
+
+				break
+			}
+		}
 	}
 }
 
