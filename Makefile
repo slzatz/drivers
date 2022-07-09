@@ -107,6 +107,8 @@ smoke-test:
 	@md5sum ./build/test.hex
 	tinygo build -size short -o ./build/test.hex -target=p1am-100 ./examples/p1am/main.go
 	@md5sum ./build/test.hex
+	tinygo build -size short -o ./build/test.hex -target=pico ./examples/pca9685/main.go
+	@md5sum ./build/test.hex
 	tinygo build -size short -o ./build/test.hex -target=microbit ./examples/pcd8544/setbuffer/main.go
 	@md5sum ./build/test.hex
 	tinygo build -size short -o ./build/test.hex -target=microbit ./examples/pcd8544/setpixel/main.go
@@ -156,6 +158,10 @@ smoke-test:
 	tinygo build -size short -o ./build/test.hex -target=arduino-nano33 ./examples/wifinina/webclient/main.go
 	@md5sum ./build/test.hex
 	tinygo build -size short -o ./build/test.hex -target=circuitplay-express ./examples/ws2812
+	@md5sum ./build/test.hex
+	tinygo build -size short -o ./build/test.bin -target=m5stamp-c3          ./examples/ws2812
+	@md5sum ./build/test.bin
+	tinygo build -size short -o ./build/test.hex -target=feather-nrf52840 ./examples/is31fl3731/main.go
 	@md5sum ./build/test.hex
 ifneq ($(AVR), 0)
 	tinygo build -size short -o ./build/test.hex -target=arduino   ./examples/ws2812
@@ -225,16 +231,24 @@ endif
 	@md5sum ./build/test.elf
 	tinygo build -size short -o ./build/test.hex -target=nucleo-wl55jc ./examples/sx126x/lora_rxtx/
 	@md5sum ./build/test.hex
+	tinygo build -size short -o ./build/test.uf2 -target=pico ./examples/ssd1289/main.go
+	@md5sum ./build/test.uf2
+	tinygo build -size short -o ./build/test.hex -target=pico ./examples/irremote/main.go
+	@md5sum ./build/test.hex
+	tinygo build -size short -o ./build/test.hex -target=badger2040 ./examples/uc8151/main.go
+	@md5sum ./build/test.hex
+	tinygo build -size short -o ./build/test.uf2 -target=pico ./examples/scd4x/main.go
+	@md5sum ./build/test.uf2
 
 DRIVERS = $(wildcard */)
 NOTESTS = build examples flash semihosting pcd8544 shiftregister st7789 microphone mcp3008 gps microbitmatrix \
 		hcsr04 ssd1331 ws2812 thermistor apa102 easystepper ssd1351 ili9341 wifinina shifter hub75 \
-		hd44780 buzzer ssd1306 espat l9110x st7735 bmi160 l293x dht keypad4x4 max72xx p1am tone tm1637 \
+		hd44780 buzzer ssd1306 espat l9110x st7735 bmi160 l293x keypad4x4 max72xx p1am tone tm1637 \
 		pcf8563 mcp2515 servo sdcard rtl8720dn image cmd i2csoft hts221 lps22hb apds9960 axp192 xpt2046 \
-		ft6336 sx126x
+		ft6336 sx126x ssd1289 irremote uc8151
 TESTS = $(filter-out $(addsuffix /%,$(NOTESTS)),$(DRIVERS))
 
 unit-test:
-	@go test -v $(addprefix ./,$(TESTS)) 
+	@go test -v $(addprefix ./,$(TESTS))
 
 test: clean fmt-check unit-test smoke-test

@@ -7,6 +7,7 @@ const Address = 0x29 //0x52
 const (
 	CHIP_ID                                                 = 0xEACC
 	SOFT_RESET                                              = 0x0000
+	I2C_SLAVE_DEVICE_ADDRESS                                = 0x0001
 	OSC_MEASURED_FAST_OSC_FREQUENCY                         = 0x0006
 	VHV_CONFIG_TIMEOUT_MACROP_LOOP_BOUND                    = 0x0008
 	VHV_CONFIG_INIT                                         = 0x000B
@@ -46,6 +47,8 @@ const (
 	SD_CONFIG_INITIAL_PHASE_SD1                             = 0x007B
 	SYSTEM_GROUPED_PARAMETER_HOLD_1                         = 0x007C
 	SD_CONFIG_QUANTIFIER                                    = 0x007E
+	ROI_CONFIG_USER_ROI_CENTRE_SPAD                         = 0x007F
+	ROI_CONFIG_USER_ROI_REQUESTED_GLOBAL_XY_SIZE            = 0x0080
 	SYSTEM_SEQUENCE_CONFIG                                  = 0x0081
 	SYSTEM_GROUPED_PARAMETER_HOLD                           = 0x0082
 	SYSTEM_INTERRUPT_CLEAR                                  = 0x0086

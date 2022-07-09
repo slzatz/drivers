@@ -1,3 +1,66 @@
+0.21.0
+---
+- **new devices**
+    - lsm6ds3tr: initial implementation
+    - UC8151: used in Pimoroni's badger2040 e-paper (#416)
+    - scd4x: implement driver for CO2 sensor
+
+- **enhancements**
+    - easystepper: Add support for '8-step mode'
+    - vl53l1x: Add functions for setting the device address
+    - sdcard: support thingplus-rp2040
+    - wifinina: add mutex to prevent communication race problems
+    - **ws2812**
+        - support thingplus-rp2040 board
+        - Added 125 MHz rp2040 timing
+        - Added unsafe.Pointer for pointer conversion
+
+- **bugfixes**
+    - ssd1351: Fix mirrored text on OLED display
+
+
+0.20.0
+---
+- **new devices**
+    - irremote: Add basic infra-red driver
+    - IS31FL3731: add driver for IS31FL3731 matrix LED driver (#370)
+    - l3gd20: add gyro driver
+    - SSD1289: Driver for SSD1289 LCD
+
+- **enhancements**
+    - **ili9341**
+        - add support for atsame5x
+        - added Feather board support to InitDisplay()
+        - avoid heap allocations
+    - **lps22hb**
+        - pin rename, sync with main repo
+    - **lsmXXX**
+        - unified, error handling, memory management
+    - **max7xx**
+        - Add a SetIntensity() function to max7xx driver and example
+    - **vl53l1x**
+        - Add functions for setting 'region of interest'
+        - Fix switch-case semantics
+    - **ws2812**
+        - add support for m5stamp-c3
+        - convert AVR assembly to C inline assembly
+        - support high-MHz ARMv6M chips like the RP2040
+        - write inline assembly using C instead of Go
+
+- **bugfixes**
+    - **dht**
+        - fix error check in example
+        - fix humidity and temperature extraction for DHT22 (#358)
+    - **esp8266**
+        - fix ConnectToAccessPoint timeout args
+    - **image**
+        - fix interface
+    - **pca9685**
+        - add buffered one shot write
+        - fix on=0 bug
+    - **wifinina**
+        - correct sendParamStr to handle empty strings, such as when connecting to an unsecured access point
+
 0.19.0
 ---
 - **new devices**

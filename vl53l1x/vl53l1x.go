@@ -10,6 +10,7 @@
 package vl53l1x // import "tinygo.org/x/drivers/vl53l1x"
 
 import (
+	"errors"
 	"time"
 
 	"tinygo.org/x/drivers"
@@ -132,6 +133,17 @@ func (d *Device) Configure(use2v8Mode bool) bool {
 	return true
 }
 
+// SetAddress sets the I2C address which this device listens to.
+func (d *Device) SetAddress(address uint8) {
+	d.writeReg(I2C_SLAVE_DEVICE_ADDRESS, address)
+	d.Address = uint16(address)
+}
+
+// GetAddress returns the I2C address which this device listens to.
+func (d *Device) GetAddress() uint8 {
+	return uint8(d.Address)
+}
+
 // SetTimeout configures the timeout
 func (d *Device) SetTimeout(timeout uint32) {
 	d.timeout = timeout
@@ -157,7 +169,6 @@ func (d *Device) SetDistanceMode(mode DistanceMode) bool {
 		d.writeReg(SD_CONFIG_WOI_SD1, 0x05)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD0, 6)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD1, 6)
-		break
 	case MEDIUM:
 		// timing config
 		d.writeReg(RANGE_CONFIG_VCSEL_PERIOD_A, 0x0B)
@@ -169,7 +180,6 @@ func (d *Device) SetDistanceMode(mode DistanceMode) bool {
 		d.writeReg(SD_CONFIG_WOI_SD1, 0x09)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD0, 10)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD1, 10)
-		break
 	case LONG:
 		// timing config
 		d.writeReg(RANGE_CONFIG_VCSEL_PERIOD_A, 0x0F)
@@ -181,7 +191,6 @@ func (d *Device) SetDistanceMode(mode DistanceMode) bool {
 		d.writeReg(SD_CONFIG_WOI_SD1, 0x0D)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD0, 14)
 		d.writeReg(SD_CONFIG_INITIAL_PHASE_SD1, 14)
-		break
 	default:
 		return false
 	}
@@ -333,44 +342,35 @@ func (d *Device) AmbientRate() int32 {
 func (d *Device) getRangingData() {
 	d.rangingData.mm = uint16((uint32(d.results.mmCrosstalkSD0)*2011 + 0x0400) / 0x0800)
 	switch d.results.status {
-	case 17: // MULTCLIPFAIL
-	case 2: // VCSELWATCHDOGTESTFAILURE
-	case 1: // VCSELCONTINUITYTESTFAILURE
-	case 3: // NOVHVVALUEFOUND
+	case 1, // VCSELCONTINUITYTESTFAILURE
+		2,  // VCSELWATCHDOGTESTFAILURE
+		3,  // NOVHVVALUEFOUND
+		17: // MULTCLIPFAIL
 		d.rangingData.status = HardwareFail
-		break
 
 	case 13: // USERROICLIP
 		d.rangingData.status = MinRangeFail
-		break
 
 	case 18: // GPHSTREAMCOUNT0READY
 		d.rangingData.status = SynchronizationInt
-		break
 
 	case 5: // RANGEPHASECHECK
 		d.rangingData.status = OutOfBoundsFail
-		break
 
 	case 4: // MSRCNOTARGET
 		d.rangingData.status = SignalFail
-		break
 
 	case 6: // SIGMATHRESHOLDCHECK
 		d.rangingData.status = SignalFail
-		break
 
 	case 7: // PHASECONSISTENCY
 		d.rangingData.status = WrapTargetFail
-		break
 
 	case 12: // RANGEIGNORETHRESHOLD
 		d.rangingData.status = XtalkSignalFail
-		break
 
 	case 8: // MINCLIP
 		d.rangingData.status = RangeValidMinRangeClipped
-		break
 
 	case 9: // RANGECOMPLETE
 		if d.results.streamCount == 0 {
@@ -378,7 +378,6 @@ func (d *Device) getRangingData() {
 		} else {
 			d.rangingData.status = RangeValid
 		}
-		break
 
 	default:
 		d.rangingData.status = None
@@ -428,6 +427,38 @@ func (d *Device) StopContinuous() {
 
 	// remove phasecal override
 	d.writeReg(PHASECAL_CONFIG_OVERRIDE, 0x00)
+}
+
+// SetROI sets the 'region of interest' for x and y coordinates. Valid ranges are from 4/4 to 16/16.
+func (d *Device) SetROI(x, y uint8) error {
+	if !validROIRange(x, y) {
+		return errors.New("ROI value out of range")
+	}
+
+	if x > 10 || y > 10 {
+		d.writeReg(ROI_CONFIG_USER_ROI_CENTRE_SPAD, 199)
+	}
+
+	d.writeReg(ROI_CONFIG_USER_ROI_REQUESTED_GLOBAL_XY_SIZE, (y-1)<<4|(x-1))
+	return nil
+}
+
+// GetROI returns the currently configured 'region of interest' for x and y coordinates.
+func (d *Device) GetROI() (x, y uint8, err error) {
+	reg := d.readReg(ROI_CONFIG_USER_ROI_REQUESTED_GLOBAL_XY_SIZE)
+
+	x = (reg & 0x0f) + 1
+	y = ((reg & 0xf0) >> 4) + 1
+
+	if !validROIRange(x, y) {
+		err = errors.New("ROI value out of range")
+	}
+
+	return
+}
+
+func validROIRange(x, y uint8) bool {
+	return x >= 4 && x <= 16 && y >= 4 && y <= 16
 }
 
 // writeReg sends a single byte to the specified register address
