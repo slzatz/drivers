@@ -6,4 +6,5 @@ type I2C interface {
 	ReadRegister(addr uint8, r uint8, buf []byte) error
 	WriteRegister(addr uint8, r uint8, buf []byte) error
 	Tx(addr uint16, w, r []byte) error
+	WriteByte(data byte) error
 }
