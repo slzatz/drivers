@@ -186,40 +186,21 @@ func (d Device) blinkRate(b uint8) {
 	}
 }
 
-//void Adafruit_Trellis::writeDisplay(void) {
 func (d Device) WriteDisplay() {
-	//Wire.write((uint8_t)0x00); // start at address $00
-	err := d.bus.Tx(d.Address, []byte{0x00}, nil)
-	if err != nil {
-		println("Could not write 00")
-		return
-	}
-
+	var buf [17]uint8
+	buf[0] = 0x00
 	for i := 0; i < 8; i++ {
-		//  Wire.write(displaybuffer[i] & 0xFF);
-		// this is the first byte of the uint16
-		fmt.Printf("i = %d, low = %v\r\n", i, []byte{uint8(displaybuffer[i] & 0xFF)})
-		//err = d.bus.Tx(d.Address, []byte{uint8(displaybuffer[i] & 0xFF)}, nil)
-		err := d.bus.Tx(d.Address, []byte{uint8(displaybuffer[i] & 0xFF)}, nil)
-		if err != nil {
-			println("Could not write first byte")
-			return
-		}
-		//  Wire.write(displaybuffer[i] >> 8);
-		// this is the second byte of the uint16
-		fmt.Printf("i = %d, high = %v\r\n", i, []byte{uint8(displaybuffer[i] >> 8)})
-		//err = d.bus.Tx(d.Address, []byte{uint8(displaybuffer[i] >> 8)}, nil)
-		err = d.bus.Tx(d.Address, []byte{uint8(displaybuffer[i] >> 8)}, nil)
-		if err != nil {
-			println("Could not write second byte")
-			return
-		}
+		buf[2*i+1] = uint8(displaybuffer[i] & 0xFF)
+		buf[2*i+2] = uint8(displaybuffer[i] >> 8)
+	}
+	err := d.bus.Tx(d.Address, buf[:], nil)
+	if err != nil {
+		println("Could not write display")
+		return
 	}
 }
 
-//void Adafruit_Trellis::clear(void) {
 func Clear() {
-	//memset(displaybuffer, 0, sizeof(displaybuffer));
 	for i := range displaybuffer {
 		displaybuffer[i] = 0
 	}
