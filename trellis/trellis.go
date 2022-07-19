@@ -93,11 +93,11 @@ func JustPressed(k uint8) bool {
 	return (IsKeyPressed(k) && !WasKeyPressed(k))
 }
 
-func justReleased(k uint8) bool {
+func JustReleased(k uint8) bool {
 	return (!IsKeyPressed(k) && WasKeyPressed(k))
 }
 
-func isLED(x uint8) bool {
+func IsLED(x uint8) bool {
 	if x > 15 {
 		return false
 	}
@@ -113,7 +113,7 @@ func SetLED(x uint8) {
 	displaybuffer[led>>4] |= (1 << (led & 0x0F))
 }
 
-func clrLED(x uint8) {
+func ClrLED(x uint8) {
 	if x > 15 {
 		return
 	}
