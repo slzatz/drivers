@@ -1,0 +1,23 @@
+package sh1107
+
+const (
+	SET_CONTRAST        = 0x81
+	SET_ENTIRE_ON       = 0xA4
+	SET_NORM_INV        = 0xA6
+	SET_DISP            = 0xAE
+	SET_DCDC_MODE       = 0xAD
+	SET_MEM_MODE        = 0x20
+	SET_PAGE_ADDR       = 0xB0
+	SET_COL_LO_ADDR     = 0x00
+	SET_COL_HI_ADDR     = 0x10
+	SET_DISP_START_LINE = 0xDC
+	SET_SEG_REMAP       = 0xA0
+	SET_MUX_RATIO       = 0xA8
+	SET_COM_OUT_DIR     = 0xC0
+	SET_DISP_OFFSET     = 0xD3
+	SET_DISP_CLK_DIV    = 0xD5
+	SET_PRECHARGE       = 0xD9
+	SET_VCOM_DESEL      = 0xDB
+
+	TEST_CHUNK = 8
+)
