@@ -1,8 +1,10 @@
+// this driver is pretty specific to the dimensions of the Adafruit feather OLED 128 x 64
+// based on the sh1107 driver
+// Note that the dimensions have to be 64 width x 128 height to use page adressing mode
+// if you want text in 128 x 64 it is easier to rotate the text then use vertical addressing mode
 package sh1107
 
 import (
-	"errors"
-	"fmt"
 	"image/color"
 	"time"
 
@@ -41,92 +43,46 @@ Note my Trellis driver does not use write register
 // Device wraps I2C or SPI connection.
 type Device struct {
 	//bus        Buser
-	bus        drivers.I2C
-	buffer     []byte
-	width      int16
-	height     int16
-	bufferSize int16
-	//vccState   VccMode
-	//canReset   bool
-	pageMode    bool
+	bus         drivers.I2C
+	buffer      []byte
+	width       int16
+	height      int16
+	bufferSize  int16
 	pages       int16
 	lineBytes   int16
 	size        int16
 	externalVCC bool
 	address     uint16
-	//currBuffer []byte
-	//prevBuffer []byte
 }
-
-/*
-// NewI2C creates a new sh1107. The I2C wire must already be configured.
-func NewI2C(bus drivers.I2C) Device {
-	return Device{
-		bus: &I2CBus{
-			wire:    bus,
-			Address: Address,
-		},
-	}
-}
-*/
 
 // default address is 0x3C
-func New(bus drivers.I2C, address uint16, width int16, height int16, extVCC bool) Device {
+func New(bus drivers.I2C, address uint16, extVCC bool) Device {
 	return Device{bus: bus,
 		address:     address,
-		width:       width,
-		height:      height,
 		externalVCC: extVCC,
 	}
 }
 
 func (d *Device) Configure() {
+	d.width = 64
+	d.height = 128
 	d.pages = d.height / 8
 	d.lineBytes = d.width / 8
 	d.bufferSize = d.width * d.height / 8
-	/*
-		d.currBuffer = make([]byte, size)
-		d.prevBuffer = make([]byte, size)
-		for i := range prevBuffer {
-			prevBuffer[i] = 0xFF
-		}
-	*/
 	d.buffer = make([]byte, d.bufferSize)
-
-	if d.width == 128 && d.height == 64 {
-		d.pageMode = false
-	} else if (d.width == 64 && d.height == 128) || (d.width == 128 && d.height == 128) {
-		d.pageMode = true
-	}
 
 	time.Sleep(100 * time.Nanosecond)
 
 	d.Command(SET_DISP)
-	if d.pageMode {
-		d.Command(SET_MEM_MODE)
-	} else {
-		d.Command(SET_MEM_MODE | 0x01)
-		//d.Command(SET_MEM_MODE)
-	}
+	d.Command(SET_MEM_MODE) // page mode; | 0x01 for vert mode
 	d.Command(SET_DISP_START_LINE)
 	d.Command(0x00)
 	d.Command(SET_SEG_REMAP)
-	if d.pageMode {
-		d.Command(SET_COM_OUT_DIR)
-	} else {
-		d.Command(SET_COM_OUT_DIR | 0x08)
-	}
-
+	d.Command(SET_COM_OUT_DIR) // for page mode | 0x08 for vert mode
 	d.Command(SET_MUX_RATIO)
 	d.Command(0x7F)
-
 	d.Command(SET_DISP_OFFSET)
-	if d.width != d.height {
-		d.Command(0x60)
-	} else {
-		d.Command(0x00)
-	}
-
+	d.Command(0x60) //width != height else when == its 0x00
 	d.Command(SET_DISP_CLK_DIV)
 	d.Command(0x50)
 	d.Command(SET_PRECHARGE)
@@ -148,7 +104,6 @@ func (d *Device) Configure() {
 
 // Command sends a one byte command to the display
 func (d *Device) Command(command uint8) {
-	//d.bus.tx([]byte{command}, true)
 	d.bus.Tx(d.address, []byte{0x80, command}, nil)
 }
 
@@ -162,96 +117,26 @@ func (d *Device) ClearBuffer() {
 // ClearDisplay clears the image buffer and clear the display
 func (d *Device) ClearDisplay() {
 	d.ClearBuffer()
+	println("ClearBuffer")
 	d.Display()
-}
-
-/*
-// setAddress sets the address to the I2C bus
-func (b *I2CBus) setAddress(address uint16) {
-	b.Address = address
-}
-
-// configure does nothing, but it's required to avoid reflection
-func (b *I2CBus) configure() {}
-
-// Tx sends data to the display
-func (d *Device) Tx(data []byte, isCommand bool) {
-	d.bus.tx(data, isCommand)
-	d.bus.Tx(d.Address, []byte{0x80, SET_NORM_INV | 0x00}, nil)
-}
-
-// tx sends data to the display (I2CBus implementation)
-func (b *I2CBus) tx(data []byte, isCommand bool) {
-	if isCommand {
-		b.wire.WriteRegister(uint8(b.Address), 0x00, data)
-	} else {
-		b.wire.WriteRegister(uint8(b.Address), 0x40, data)
-	}
-}
-*/
-
-// Size returns the current size of the display.
-func (d *Device) Size() (w, h int16) {
-	return d.width, d.height
 }
 
 // Display sends the whole buffer to the screen
 func (d *Device) Display() error {
-	fmt.Println("Display.Display()")
+	println("Entering Display()")
 
-	/* didn't work
-	d.Command(SET_PAGE_ADDR | 1)
-	d.Command(SET_COL_LO_ADDR | (1 & 0x0F)) //0x00
-	d.Command(SET_COL_HI_ADDR | ((1 & 0x70) >> 4))
-	*/
-	if d.pageMode {
-		for page := int16(0); page < d.pages; page++ {
-			//d.Command(uint8(SET_PAGE_ADDR | (page1 - noffs)))
-			buffer_i := page * d.width
-			d.Command(uint8(SET_PAGE_ADDR | page))
-			d.Command(uint8(SET_COL_LO_ADDR | 2)) //0x00
-			d.Command(uint8(SET_COL_HI_ADDR))
-			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
-		}
-	} else {
-		/*
-			for page := int16(0); page < d.pages; page++ {
-				for row := range [...]int16{page * 8, (page + 1) * 8} {
-					d.Command(uint8(SET_COL_LO_ADDR | (row & 0x0F)))
-					d.Command(uint8(SET_COL_HI_ADDR | (row >> 4)))
-					buffer_i := int16(row) * d.lineBytes
-					d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.lineBytes])
-				}
-			}
-		*/
-		for col := int16(0); col < d.height; col++ {
-			noffs := col * d.lineBytes
-			for page := int16(0); page < d.pages; page++ {
-				d.Command(uint8(SET_PAGE_ADDR | page))
-				d.Command(uint8(SET_COL_LO_ADDR | (col & 0x0f)))
-				d.Command(uint8(SET_COL_HI_ADDR | ((col & 0x70) >> 4)))
-				d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[noffs:noffs+d.lineBytes])
-			}
-		}
+	// assumes we are in page mode
+	for page := int16(0); page < d.pages; page++ {
+		//fmt.Printf("page = %d\r\n", page)
+		buffer_i := page * d.width
+		d.Command(uint8(SET_PAGE_ADDR | page))
+		//d.Command(uint8(SET_COL_LO_ADDR | 2)) //0x00 works
+		// two commands below define first position on each page
+		d.Command(uint8(SET_COL_LO_ADDR))
+		d.Command(uint8(SET_COL_HI_ADDR))
+		d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
 	}
-
-	/*
-			0x00, //SET_COL_LO_ADDR
-			SH110X_SETPAGEADDR + p,
-		  0x10 + ((page_start + _page_start_offset) >> 4), //SET_COL_HI_ADDR
-		  (page_start + _page_start_offset) & 0xF
-
-				d.Command(SET_COL_LO_ADDR)
-				d.Command(0)
-				d.Command(uint8(d.width - 1))
-				d.Command(SET_PAGE_ADDR)
-				d.Command(0)
-				d.Command(uint8(d.height/8) - 1)
-	*/
-
-	//d.Tx(d.buffer, false)
-	//d.bus.Tx(d.address, d.buffer, nil)
-	//	d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer)
+	println("Leaving Display()")
 
 	return nil
 }
@@ -277,14 +162,8 @@ func (d *Device) GetPixel(x int16, y int16) bool {
 	return (d.buffer[byteIndex] >> uint8(y%8) & 0x1) == 1
 }
 
-// SetBuffer changes the whole buffer at once
-func (d *Device) SetBuffer(buffer []byte) error {
-	if int16(len(buffer)) != d.bufferSize {
-		//return ErrBuffer
-		return errors.New("wrong size buffer")
-	}
-	for i := int16(0); i < d.bufferSize; i++ {
-		d.buffer[i] = buffer[i]
-	}
-	return nil
+// Size returns the current size of the display.
+// Needed by tinyfont
+func (d *Device) Size() (w, h int16) {
+	return d.width, d.height
 }
