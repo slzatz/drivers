@@ -2,9 +2,10 @@
 // based on the sh1107 driver
 // Note that the dimensions have to be 64 width x 128 height to use page adressing mode
 // if you want text in 128 x 64 it is easier to rotate the text then use vertical addressing mode
-package sh1107
+package sh1107x
 
 import (
+	"fmt"
 	"image/color"
 	"time"
 
@@ -54,7 +55,7 @@ type Device struct {
 	externalVCC bool
 	address     uint16
 	pageMode    bool
-	SetPixel    func(d *Device, x int16, y int16, c color.RGBA)
+	//SetPixel    func(d *Device, x int16, y int16, c color.RGBA)
 }
 
 // default address is 0x3C
@@ -68,16 +69,16 @@ func New(bus drivers.I2C, address uint16, width int16, height int16, extVCC bool
 }
 
 func (d *Device) Configure() {
-	d.width = 64
-	d.height = 128
+	//d.width = 64
+	//d.height = 128
 	d.pages = d.height / 8
 	d.lineBytes = d.width / 8
 	d.bufferSize = d.width * d.height / 8
 	d.buffer = make([]byte, d.bufferSize)
 
-	if width == 128 && height == 64 {
+	if d.width == int16(128) && d.height == int16(64) {
 		d.pageMode = false
-	} else if (width == 64 && height == 128) || (width == 128 && height == 128) {
+	} else if (d.width == 64 && d.height == 128) || (d.width == 128 && d.height == 128) {
 		d.pageMode = true
 	} else {
 		println("Dimensions don't work")
@@ -93,7 +94,7 @@ func (d *Device) Configure() {
 	}
 	d.Command(SET_DISP_START_LINE)
 	d.Command(0x00)
-	d.Command(SET_SEG_REMAP)
+	d.Command(SET_SEG_REMAP | 0x01)
 	if d.pageMode {
 		d.Command(SET_COM_OUT_DIR) // for page mode | 0x08 for vert mode
 	} else {
@@ -103,7 +104,8 @@ func (d *Device) Configure() {
 	d.Command(0x7F)
 	d.Command(SET_DISP_OFFSET)
 	if d.width != d.height {
-		d.Command(0x60) //width != height else when == its 0x00
+		//d.Command(0x60) //width != height else when == its 0x00
+		d.Command(0x00) //width != height else when == its 0x00
 	} else {
 		d.Command(0x00) //width != height else when == its 0x00
 	}
@@ -125,11 +127,13 @@ func (d *Device) Configure() {
 	d.Command(SET_NORM_INV)
 	d.Command(SET_DISP | 0x01)
 
-	if pageMode {
-		d.SetPixel = SetPixelVLSB
-	} else {
-		d.SetPixel = SetPixelHMSB
-	}
+	/*
+		if d.pageMode {
+			d.SetPixel = SetPixelVLSB
+		} else {
+			d.SetPixel = SetPixelHMSB
+		}
+	*/
 }
 
 // Command sends a one byte command to the display
@@ -156,6 +160,7 @@ func (d *Device) Display() error {
 	println("Entering Display()")
 
 	if d.pageMode {
+		fmt.Printf("PageMode = %t\r\n", d.pageMode)
 		for page := int16(0); page < d.pages; page++ {
 			buffer_i := page * d.width
 			d.Command(uint8(SET_PAGE_ADDR | page))
@@ -164,13 +169,18 @@ func (d *Device) Display() error {
 			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
 		}
 	} else {
-		for col := int16(0); col < d.width; col++ {
+		fmt.Printf("PageMode = %t\r\n", d.pageMode)
+		var col int16
+		for col = 0; col < d.width; col++ {
 			buffer_i := col * d.pages
-			d.Command(SET_PAGE_ADDR)
-			d.Command(SET_COL_LO_ADDR | (col & 0x0f))
-			d.Command(SET_COL_HI_ADDR | ((col & 0x70) >> 4))
+			//buffer_i := col * d.lineBytes
+			d.Command(uint8(SET_PAGE_ADDR | 0))
+			d.Command(uint8(SET_COL_LO_ADDR | (col & 0x0f)))
+			d.Command(uint8(SET_COL_HI_ADDR | (col&0x70)>>4))
 			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.pages])
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.lineBytes])
 		}
+		fmt.Printf("col = %d\r\n", col)
 
 	}
 	println("Leaving Display()")
@@ -178,30 +188,49 @@ func (d *Device) Display() error {
 	return nil
 }
 
-func (d *Device) SetPixelVLSB(x int16, y int16, c color.RGBA) {
+//func SetPixelVLSB(d *Device, x int16, y int16, c color.RGBA) {
+//func SetPixelHMSB(x int16, y int16, c color.RGBA) {
+func (d *Device) SetPixel(x int16, y int16, c color.RGBA) {
 	if x < 0 || x >= d.width || y < 0 || y >= d.height {
 		return
 	}
-	byteIndex := x + (y/8)*d.width
-	if c.R != 0 || c.G != 0 || c.B != 0 {
-		d.buffer[byteIndex] |= 1 << uint8(y%8)
+	if d.pageMode {
+		byteIndex := x + (y/8)*d.width
+		if c.R != 0 || c.G != 0 || c.B != 0 {
+			d.buffer[byteIndex] |= 1 << uint8(y%8)
+		} else {
+			d.buffer[byteIndex] &^= 1 << uint8(y%8)
+		}
 	} else {
-		d.buffer[byteIndex] &^= 1 << uint8(y%8)
-	}
-}
-func (d *Device) SetPixelHMSB(x int16, y int16, c color.RGBA) {
-	if x < 0 || x >= d.width || y < 0 || y >= d.height {
-		return
-	}
-	byteIndex := (x + y*d.width) >> 3
-	if c.R != 0 || c.G != 0 || c.B != 0 {
-		d.buffer[byteIndex] |= 1 << uint8(x%8)
-	} else {
-		d.buffer[byteIndex] &^= 1 << uint8(x%8)
+		//if x < 0 || x >= d.width || y < 0 || y >= d.height {
+		//		return
+		//}
+		//byteIndex := (x + y*d.width) >> 3 //####### with no roti: half screen char too tall
+		byteIndex := (x*d.height + y) >> 3 //$$$$$$$ with no rot: horizontal chars reversed but correct size half screen
+		//byteIndex := y + (x/8)*d.height
+		/*
+			byteIndex := (x + y*d.height) >> 3
+			if x > 128 {
+				byteIndex := (x - 127 + y*d.height) >> 3
+				byteIndex += 520
+			}
+		*/
+
+		//yy := bits.Reverse8(uint8(y))
+		if c.R != 0 || c.G != 0 || c.B != 0 {
+			//d.buffer[byteIndex] |= 1 << uint8(x%8) //#######
+			d.buffer[byteIndex] |= 1 << uint8(y%8) //$$$$$$
+			//d.buffer[byteIndex] |= 1 << yy % 8
+		} else {
+			//d.buffer[byteIndex] &^= 1 << uint8(x%8) //########
+			d.buffer[byteIndex] |= 1 << uint8(y%8) //$$$$$$
+			//d.buffer[byteIndex] &^= 1 << yy % 8 //x
+		}
 	}
 }
 
 // GetPixel returns if the specified pixel is on (true) or off (false)
+/*
 func (d *Device) GetPixel(x int16, y int16) bool {
 	if x < 0 || x >= d.width || y < 0 || y >= d.height {
 		return false
@@ -209,6 +238,7 @@ func (d *Device) GetPixel(x int16, y int16) bool {
 	byteIndex := x + (y/8)*d.width
 	return (d.buffer[byteIndex] >> uint8(y%8) & 0x1) == 1
 }
+*/
 
 // Size returns the current size of the display.
 // Needed by tinyfont
