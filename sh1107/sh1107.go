@@ -6,7 +6,6 @@ package sh1107
 
 import (
 	"image/color"
-	"time"
 
 	"tinygo.org/x/drivers"
 )
@@ -29,10 +28,6 @@ const (
 	SET_DISP_CLK_DIV    = 0xD5
 	SET_PRECHARGE       = 0xD9
 	SET_VCOM_DESEL      = 0xDB
-
-	TEST_CHUNK = 8
-
-	ADDRESS_128_64 = 0x3C
 )
 
 /*
@@ -43,22 +38,26 @@ Note my Trellis driver does not use write register
 // Device wraps I2C or SPI connection.
 type Device struct {
 	//bus        Buser
-	bus         drivers.I2C
-	buffer      []byte
-	width       int16
-	height      int16
-	bufferSize  int16
-	pages       int16
-	lineBytes   int16
+	bus        drivers.I2C
+	buffer     []byte
+	width      int16
+	height     int16
+	bufferSize int16
+	pages      int16
+	//lineBytes   int16
 	size        int16
 	externalVCC bool
 	address     uint16
+	pageMode    bool
 }
 
 // default address is 0x3C
-func New(bus drivers.I2C, address uint16, extVCC bool) Device {
-	return Device{bus: bus,
+func New(bus drivers.I2C, address uint16, width int16, height int16, extVCC bool) Device {
+	return Device{
+		bus:         bus,
 		address:     address,
+		width:       width,
+		height:      height,
 		externalVCC: extVCC,
 	}
 }
@@ -67,22 +66,41 @@ func (d *Device) Configure() {
 	d.width = 64
 	d.height = 128
 	d.pages = d.height / 8
-	d.lineBytes = d.width / 8
+	//d.lineBytes = d.width / 8
 	d.bufferSize = d.width * d.height / 8
 	d.buffer = make([]byte, d.bufferSize)
 
-	time.Sleep(100 * time.Nanosecond)
+	if d.width == int16(128) && d.height == int16(64) {
+		d.pageMode = false
+	} else if (d.width == 64 && d.height == 128) || (d.width == 128 && d.height == 128) {
+		d.pageMode = true
+	} else {
+		println("Dimensions don't work")
+	}
+	//time.Sleep(100 * time.Nanosecond)
 
 	d.Command(SET_DISP)
-	d.Command(SET_MEM_MODE) // page mode; | 0x01 for vert mode
+	if d.pageMode {
+		d.Command(SET_MEM_MODE) // page mode; | 0x01 for vert mode
+	} else {
+		d.Command(SET_MEM_MODE | 0x01)
+	}
 	d.Command(SET_DISP_START_LINE)
 	d.Command(0x00)
-	d.Command(SET_SEG_REMAP)
-	d.Command(SET_COM_OUT_DIR) // for page mode | 0x08 for vert mode
+	d.Command(SET_SEG_REMAP | 0x00) // 0 is normal and 1 is reverse
+	if d.pageMode {
+		d.Command(SET_COM_OUT_DIR) // for page mode | 0x08 for vert mode
+	} else {
+		d.Command(SET_COM_OUT_DIR | 0x08)
+	}
 	d.Command(SET_MUX_RATIO)
 	d.Command(0x7F)
 	d.Command(SET_DISP_OFFSET)
-	d.Command(0x60) //width != height else when == its 0x00
+	if d.width != d.height {
+		d.Command(0x60) //width != height else when == its 0x00
+	} else {
+		d.Command(0x00)
+	}
 	d.Command(SET_DISP_CLK_DIV)
 	d.Command(0x50)
 	d.Command(SET_PRECHARGE)
@@ -117,26 +135,35 @@ func (d *Device) ClearBuffer() {
 // ClearDisplay clears the image buffer and clear the display
 func (d *Device) ClearDisplay() {
 	d.ClearBuffer()
-	println("ClearBuffer")
+	//println("ClearBuffer")
 	d.Display()
 }
 
 // Display sends the whole buffer to the screen
 func (d *Device) Display() error {
-	println("Entering Display()")
+	//println("Entering Display()")
 
-	// assumes we are in page mode
-	for page := int16(0); page < d.pages; page++ {
-		//fmt.Printf("page = %d\r\n", page)
-		buffer_i := page * d.width
-		d.Command(uint8(SET_PAGE_ADDR | page))
-		//d.Command(uint8(SET_COL_LO_ADDR | 2)) //0x00 works
-		// two commands below define first position on each page
-		d.Command(uint8(SET_COL_LO_ADDR))
-		d.Command(uint8(SET_COL_HI_ADDR))
-		d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
+	if d.pageMode {
+		for page := int16(0); page < d.pages; page++ {
+			//fmt.Printf("page = %d\r\n", page)
+			buffer_i := page * d.width
+			d.Command(uint8(SET_PAGE_ADDR | page))
+			// two commands below define first position on each page as col 0
+			d.Command(uint8(SET_COL_LO_ADDR))
+			d.Command(uint8(SET_COL_HI_ADDR))
+			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
+		}
+	} else {
+		for col := int16(0); col < d.width; col++ {
+			buffer_i := col * d.pages
+			// the first position for each column is page 0
+			d.Command(uint8(SET_PAGE_ADDR | 0))
+			d.Command(uint8(SET_COL_LO_ADDR | (col & 0x0f)))
+			d.Command(uint8(SET_COL_HI_ADDR | (0xF & (col >> 4))))
+			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.pages])
+		}
 	}
-	println("Leaving Display()")
+	//println("Leaving Display()")
 
 	return nil
 }
@@ -145,11 +172,20 @@ func (d *Device) SetPixel(x int16, y int16, c color.RGBA) {
 	if x < 0 || x >= d.width || y < 0 || y >= d.height {
 		return
 	}
-	byteIndex := x + (y/8)*d.width
-	if c.R != 0 || c.G != 0 || c.B != 0 {
-		d.buffer[byteIndex] |= 1 << uint8(y%8)
+	if d.pageMode {
+		byteIndex := x + (y/8)*d.width
+		if c.R != 0 || c.G != 0 || c.B != 0 {
+			d.buffer[byteIndex] |= 1 << uint8(y%8)
+		} else {
+			d.buffer[byteIndex] &^= 1 << uint8(y%8)
+		}
 	} else {
-		d.buffer[byteIndex] &^= 1 << uint8(y%8)
+		byteIndex := (x*d.height + y) >> 3
+		if c.R != 0 || c.G != 0 || c.B != 0 {
+			d.buffer[byteIndex] |= 1 << uint8(y%8)
+		} else {
+			d.buffer[byteIndex] |= 1 << uint8(y%8)
+		}
 	}
 }
 
@@ -160,6 +196,7 @@ func (d *Device) GetPixel(x int16, y int16) bool {
 	}
 	byteIndex := x + (y/8)*d.width
 	return (d.buffer[byteIndex] >> uint8(y%8) & 0x1) == 1
+	// fix me: needs vert mode version of above
 }
 
 // Size returns the current size of the display.

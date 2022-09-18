@@ -30,10 +30,6 @@ const (
 	SET_DISP_CLK_DIV    = 0xD5
 	SET_PRECHARGE       = 0xD9
 	SET_VCOM_DESEL      = 0xDB
-
-	TEST_CHUNK = 8
-
-	ADDRESS_128_64 = 0x3C
 )
 
 /*
@@ -43,7 +39,6 @@ Note my Trellis driver does not use write register
 
 // Device wraps I2C or SPI connection.
 type Device struct {
-	//bus        Buser
 	bus         drivers.I2C
 	buffer      []byte
 	width       int16
@@ -55,10 +50,12 @@ type Device struct {
 	externalVCC bool
 	address     uint16
 	pageMode    bool
-	//SetPixel    func(d *Device, x int16, y int16, c color.RGBA)
+
+	testBuffer  []byte
+	clearBuffer []byte
 }
 
-// default address is 0x3C
+// default address of the sh1107 is 0x3C
 func New(bus drivers.I2C, address uint16, width int16, height int16, extVCC bool) Device {
 	return Device{bus: bus,
 		address:     address,
@@ -69,13 +66,45 @@ func New(bus drivers.I2C, address uint16, width int16, height int16, extVCC bool
 }
 
 func (d *Device) Configure() {
-	//d.width = 64
-	//d.height = 128
 	d.pages = d.height / 8
 	d.lineBytes = d.width / 8
 	d.bufferSize = d.width * d.height / 8
 	d.buffer = make([]byte, d.bufferSize)
+	d.testBuffer = make([]byte, 16)
+	d.testBuffer[0] = 0xff
+	d.testBuffer[1] = 0x0
+	d.testBuffer[2] = 0x0
+	d.testBuffer[3] = 0x0
+	d.testBuffer[4] = 0x0
+	d.testBuffer[5] = 0x0
+	d.testBuffer[6] = 0x0
+	d.testBuffer[7] = 0x0
+	d.testBuffer[8] = 0x0
+	d.testBuffer[9] = 0x0
+	d.testBuffer[10] = 0xff
+	d.testBuffer[11] = 0x0
+	d.testBuffer[12] = 0x0
+	d.testBuffer[13] = 0x0
+	d.testBuffer[14] = 0x0
+	d.testBuffer[15] = 0xff
 
+	d.clearBuffer = make([]byte, 16)
+	d.clearBuffer[0] = 0x0
+	d.clearBuffer[1] = 0x0
+	d.clearBuffer[2] = 0x0
+	d.clearBuffer[3] = 0x0
+	d.clearBuffer[4] = 0x0
+	d.clearBuffer[5] = 0x0
+	d.clearBuffer[6] = 0x0
+	d.clearBuffer[7] = 0x0
+	d.clearBuffer[8] = 0x0
+	d.clearBuffer[9] = 0x0
+	d.clearBuffer[10] = 0x0
+	d.clearBuffer[11] = 0x0
+	d.clearBuffer[12] = 0x0
+	d.clearBuffer[13] = 0x0
+	d.clearBuffer[14] = 0x0
+	d.clearBuffer[15] = 0x0
 	if d.width == int16(128) && d.height == int16(64) {
 		d.pageMode = false
 	} else if (d.width == 64 && d.height == 128) || (d.width == 128 && d.height == 128) {
@@ -94,18 +123,18 @@ func (d *Device) Configure() {
 	}
 	d.Command(SET_DISP_START_LINE)
 	d.Command(0x00)
-	d.Command(SET_SEG_REMAP | 0x01)
+	d.Command(SET_SEG_REMAP | 0x00) // 0 is normal and 1 is reverse
 	if d.pageMode {
 		d.Command(SET_COM_OUT_DIR) // for page mode | 0x08 for vert mode
 	} else {
-		d.Command(SET_COM_OUT_DIR | 0x08) // for page mode | 0x08 for vert mode
+		d.Command(SET_COM_OUT_DIR | 0x00) // 0x08 for vert mode if not reverses text
 	}
 	d.Command(SET_MUX_RATIO)
-	d.Command(0x7F)
+	d.Command(0x7F) //0x7f
 	d.Command(SET_DISP_OFFSET)
 	if d.width != d.height {
 		//d.Command(0x60) //width != height else when == its 0x00
-		d.Command(0x00) //width != height else when == its 0x00
+		d.Command(0x60) //width != height else when == its 0x00
 	} else {
 		d.Command(0x00) //width != height else when == its 0x00
 	}
@@ -141,14 +170,12 @@ func (d *Device) Command(command uint8) {
 	d.bus.Tx(d.address, []byte{0x80, command}, nil)
 }
 
-// ClearBuffer clears the image buffer
 func (d *Device) ClearBuffer() {
 	for i := int16(0); i < d.bufferSize; i++ {
 		d.buffer[i] = 0
 	}
 }
 
-// ClearDisplay clears the image buffer and clear the display
 func (d *Device) ClearDisplay() {
 	d.ClearBuffer()
 	println("ClearBuffer")
@@ -171,14 +198,56 @@ func (d *Device) Display() error {
 	} else {
 		fmt.Printf("PageMode = %t\r\n", d.pageMode)
 		var col int16
-		for col = 0; col < d.width; col++ {
-			buffer_i := col * d.pages
+		for col = 0; col < 64; col++ {
+			//for col = 0; col < d.width; col++ {
+			//buffer_i := col * d.pages
 			//buffer_i := col * d.lineBytes
-			d.Command(uint8(SET_PAGE_ADDR | 0))
+			//buffer_i := col * d.height
 			d.Command(uint8(SET_COL_LO_ADDR | (col & 0x0f)))
-			d.Command(uint8(SET_COL_HI_ADDR | (col&0x70)>>4))
-			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.pages])
+			//d.Command(uint8(SET_COL_HI_ADDR | (col&0x70)>>4))
+			d.Command(uint8(SET_COL_HI_ADDR | (0xF & (col >> 4))))
+			d.Command(uint8(SET_PAGE_ADDR | 0))
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.pages])
+			d.bus.WriteRegister(uint8(d.address), 0x40, d.testBuffer[:])
 			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.lineBytes])
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.height])
+		}
+		fmt.Printf("col = %d\r\n", col)
+
+	}
+	println("Leaving Display()")
+
+	return nil
+}
+
+func (d *Device) ClearDisplay2() error {
+	println("Entering ClearDisplay2()")
+
+	if d.pageMode {
+		fmt.Printf("PageMode = %t\r\n", d.pageMode)
+		for page := int16(0); page < d.pages; page++ {
+			buffer_i := page * d.width
+			d.Command(uint8(SET_PAGE_ADDR | page))
+			d.Command(uint8(SET_COL_LO_ADDR))
+			d.Command(uint8(SET_COL_HI_ADDR))
+			d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.width])
+		}
+	} else {
+		fmt.Printf("PageMode = %t\r\n", d.pageMode)
+		var col int16
+		for col = 0; col < 128; col++ {
+			//for col = 0; col < d.width; col++ {
+			//buffer_i := col * d.pages
+			//buffer_i := col * d.lineBytes
+			//buffer_i := col * d.height
+			d.Command(uint8(SET_COL_LO_ADDR | (col & 0x0f)))
+			//d.Command(uint8(SET_COL_HI_ADDR | (col&0x70)>>4))
+			d.Command(uint8(SET_COL_HI_ADDR | (0xF & (col >> 4))))
+			d.Command(uint8(SET_PAGE_ADDR | 0))
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.pages])
+			d.bus.WriteRegister(uint8(d.address), 0x40, d.clearBuffer[:])
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.lineBytes])
+			//d.bus.WriteRegister(uint8(d.address), 0x40, d.buffer[buffer_i:buffer_i+d.height])
 		}
 		fmt.Printf("col = %d\r\n", col)
 
@@ -220,7 +289,7 @@ func (d *Device) SetPixel(x int16, y int16, c color.RGBA) {
 		if c.R != 0 || c.G != 0 || c.B != 0 {
 			//d.buffer[byteIndex] |= 1 << uint8(x%8) //#######
 			d.buffer[byteIndex] |= 1 << uint8(y%8) //$$$$$$
-			//d.buffer[byteIndex] |= 1 << yy % 8
+			//d.buffer[byteIndex] |= 1 << bits.Reverse8(uint8(y%8))
 		} else {
 			//d.buffer[byteIndex] &^= 1 << uint8(x%8) //########
 			d.buffer[byteIndex] |= 1 << uint8(y%8) //$$$$$$
