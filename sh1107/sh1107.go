@@ -1,7 +1,7 @@
-// this driver is pretty specific to the dimensions of the Adafruit feather OLED 128 x 64
-// based on the sh1107 driver
-// Note that the dimensions have to be 64 width x 128 height to use page adressing mode
-// if you want text in 128 x 64 it is easier to rotate the text then use vertical addressing mode
+// this is a driver for the sh1107
+// It's only been tested on the Adafruit 128 x 64 OLED featherwing
+// At least for the featherwing, if you want wider dimension to be the x dimension
+// it's easier to rotate the text 90 degrees and set the dimension as 64 x 128 (uses page addressing mode)
 package sh1107
 
 import (
